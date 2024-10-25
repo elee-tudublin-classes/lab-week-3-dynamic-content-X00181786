@@ -76,6 +76,7 @@ async def advice(request: Request):
     return templates.TemplateResponse(
         "apod.html", {"request": request, "data": response.json()}
     )
+    ()
 
 
 app.mount(
