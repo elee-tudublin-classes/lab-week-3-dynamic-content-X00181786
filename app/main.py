@@ -6,27 +6,80 @@ from fastapi.templating import Jinja2Templates
 
 from datetime import datetime
 
+import httpx
+from contextlib import asynccontextmanager
+import json
+from starlette.config import Config
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.requests_client = httpx.AsyncClient()
+    yield
+    await app.requests_client.aclose()
+
+
 # create app instance
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+
+# Load environment variables from .env
+config = Config(".env")
+
+# create app instance
+# app = FastAPI()
 
 # set location for templates
-templates = Jinja2Templates(directory="app/view_templates")
-
-
+templates = Jinja2Templates(directory="./app/view_templates")
 
 # handle http get requests for the site root /
 # return the index.html page
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request): 
-    serverTime: datetime = datetime.now().strftime("%d/%m/%y %H/%M/%S")
-    return templates.TemplateResponse("index.html", {"request":request, "serverTime":serverTime})
 
-@app.get("/params.html", response_class=HTMLResponse)
-async def params(request: Request, name : str | None = ""): 
-    return templates.TemplateResponse("params.html", {"request": request, "name" : name})
+
+@app.get("/advice", response_class=HTMLResponse)
+async def advice(request: Request):
+    # Define a request_client instance
+    requests_client = request.app.requests_client
+
+    # Connect to the API URL and await the response
+    response = await requests_client.get(config("ADVICE_URL"))
+
+    # Send the json data from the response in the TemplateResponse data parameter
+    return templates.TemplateResponse(
+        "advice.html", {"request": request, "data": response.json()}
+    )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    serverTime: datetime = datetime.now().strftime("%d/%m/%y %H/%M/%S")
+    return templates.TemplateResponse(
+        "index.html", {"request": request, "serverTime": serverTime}
+    )
+
+
+@app.get("/params", response_class=HTMLResponse)
+async def params(request: Request, name: str | None = ""):
+    return templates.TemplateResponse("params.html", {"request": request, "name": name})
+
+
+@app.get("/apod", response_class=HTMLResponse)
+async def advice(request: Request):
+    # Define a request_client instance
+    requests_client = request.app.requests_client
+
+    # Connect to the API URL and await the response
+    response = await requests_client.get(
+        config("NASA_APOD_URL") + config("NASA_API_KEY")
+    )
+
+    # Send the json data from the response in the TemplateResponse data parameter
+    return templates.TemplateResponse(
+        "apod.html", {"request": request, "data": response.json()}
+    )
+
 
 app.mount(
     "/static",
-    StaticFiles(directory="app/static"),
+    StaticFiles(directory="./app/static"),
     name="static",
 )
